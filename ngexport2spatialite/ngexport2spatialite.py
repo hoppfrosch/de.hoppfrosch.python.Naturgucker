@@ -5,7 +5,7 @@ import pandas as pd
 import os
 import semver
 
-version = semver.format_version(0, 1, 0, 'pre.1', 'build.1')
+version = semver.format_version(0, 1, 0, 'pre.2', 'build.1')
 
 def get_or_create(session, model, **kwargs):
   '''
@@ -21,7 +21,23 @@ def get_or_create(session, model, **kwargs):
   return instance
 
 
-class ngdb:
+class beobachtung(object):
+  def __init__(self, cur):
+    self.cur = cur
+    # do something
+    return
+
+  # Update der Beobachtungsgeometry
+  def update_geometry(self, pk, lon, lat):
+    sql = (
+            "UPDATE beobachtung SET "
+            "geom=GeomFromText('POINT(" + lon + " " + lat + ")', 4326)"
+            "WHERE beobachtung_pk=" + pk
+          )
+    self.cur.execute(sql)
+    return
+
+class ngdb(object):
   'Class handling Spatialite-DB for NG-data'
   version = '0.1'
 
@@ -58,6 +74,7 @@ class ngdb:
     # mapped classes are ready
     from sqlalchemy.orm import Session
     self.session = Session(self.engine)
+    self.beobachtung = beobachtung(self.cur)
 
   def __del__(self):
     class_name = self.__class__.__name__
@@ -119,10 +136,15 @@ class ngdb:
       #### Tabelle Beobachtung ######
       self.cur.execute('DROP table IF EXISTS Beobachtung')
       sql = (
-              "CREATE TABLE Art ("
-                "beobachtung_pk  INTEGER PRIMARY KEY AUTOINCREMENT"
+              "CREATE TABLE Beobachtung ("
+                "beobachtung_pk  TEXT PRIMARY KEY UNIQUE,"
+                "fk_art REFERENCES Art(art_pk),"
+                "bereichskoordinaten INTEGER"
               ")"
             )
+      self.cur.execute(sql)
+      # creating a POINT Geometry column
+      sql = "SELECT AddGeometryColumn('Beobachtung', 'geom', 4326, 'POINT', 'XY')"
       self.cur.execute(sql)
 
   def get_or_create(self, model, **kwargs):
@@ -134,6 +156,7 @@ class ngdb:
       self.session.add(instance)
       self.session.commit()
       return instance
+
 
 ########################################################################################################################
 # Configure logging
@@ -174,6 +197,18 @@ for index, row in df.iterrows():
   artengruppe = x.get_or_create(x.tbl.classes.Artengruppe, name=row['Artengruppe'], deutsch=row['Artengruppe'])
   gattung = x.get_or_create(x.tbl.classes.Gattung, name=row['Gattung'], fk_artengruppe=artengruppe.artengruppe_pk)
   art = x.get_or_create(x.tbl.classes.Art, name=row['Art'], fk_gattung=gattung.gattung_pk,tax_ordnr=row['Taxonom. Ordnungsnr.'],art_id=row['ArtID'],deutsch=row['Trivialname'])
+
+  lon = row['Punktverortung E']
+  lat = row['Punktverortung N']
+  bbereich = 0
+  if (lat == "0,00000") and (lon == "0,00000"):
+    lon = row['Koordinate E']
+    lat = row['Koordinate N']
+    bbereich = 1
+  lon = lon.replace(',','.')
+  lat = lat.replace(',','.')
+  b = x.get_or_create(x.tbl.classes.Beobachtung, beobachtung_pk=str(row['DatensatzID']), bereichskoordinaten=bbereich, fk_art=art.art_pk)
+  ret = x.beobachtung.update_geometry(str(row['DatensatzID']), lon, lat)
   logger.info("Processing line (%d/%d) - %s %s (%s)",index, len(df.index),row['Gattung'], row['Art'], row['Trivialname'])
 
 ########################################################################################################################
