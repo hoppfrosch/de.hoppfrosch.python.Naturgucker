@@ -20,7 +20,8 @@ def get_or_create(session, model, **kwargs):
 
   return instance
 
-
+########################################################################################################################
+# Hilfsklasse fuer Beobachtungen
 class beobachtung(object):
   def __init__(self, cur):
     self.cur = cur
@@ -37,6 +38,26 @@ class beobachtung(object):
     self.cur.execute(sql)
     return
 
+########################################################################################################################
+# Hilfsklasse fuer Gebiete
+class gebiet(object):
+  def __init__(self, cur):
+    self.cur = cur
+    # do something
+    return
+
+  # Update der Beobachtungsgeometry
+  def update_geometry(self, pk, lon, lat):
+    sql = (
+            "UPDATE gebiet SET "
+            "geom=GeomFromText('POINT(" + lon + " " + lat + ")', 4326)"
+            "WHERE gebiet_pk=" + pk
+          )
+    self.cur.execute(sql)
+    return
+
+########################################################################################################################
+# Hauptklasse
 class ngdb(object):
   'Class handling Spatialite-DB for NG-data'
   version = '0.1'
@@ -75,6 +96,7 @@ class ngdb(object):
     from sqlalchemy.orm import Session
     self.session = Session(self.engine)
     self.beobachtung = beobachtung(self.cur)
+    self.gebiet = gebiet(self.cur)
 
   def __del__(self):
     class_name = self.__class__.__name__
@@ -139,12 +161,28 @@ class ngdb(object):
               "CREATE TABLE Beobachtung ("
                 "beobachtung_pk  TEXT PRIMARY KEY UNIQUE,"
                 "fk_art REFERENCES Art(art_pk),"
-                "bereichskoordinaten INTEGER"
+                "gebietskoordinaten INTEGER,"
+                "fk_gebiet REFERENCES Gebiet(gebiet_pk)"
               ")"
             )
       self.cur.execute(sql)
       # creating a POINT Geometry column
       sql = "SELECT AddGeometryColumn('Beobachtung', 'geom', 4326, 'POINT', 'XY')"
+      self.cur.execute(sql)
+      #### Tabelle Gebiet ######
+      self.cur.execute('DROP table IF EXISTS Gebiet')
+      sql = (
+              "CREATE TABLE Gebiet ("
+                "gebiet_pk  INTEGER PRIMARY KEY AUTOINCREMENT,"
+                "name TEXT NOT NULL,"
+                "land TEXT NOT NULL,"
+                "provinz TEXT,"
+                "autokennzeichen TEXT"
+              ")"
+            )
+      self.cur.execute(sql)
+      # creating a POINT Geometry column
+      sql = "SELECT AddGeometryColumn('Gebiet', 'geom', 4326, 'POINT', 'XY')"
       self.cur.execute(sql)
 
   def get_or_create(self, model, **kwargs):
@@ -198,6 +236,16 @@ for index, row in df.iterrows():
   gattung = x.get_or_create(x.tbl.classes.Gattung, name=row['Gattung'], fk_artengruppe=artengruppe.artengruppe_pk)
   art = x.get_or_create(x.tbl.classes.Art, name=row['Art'], fk_gattung=gattung.gattung_pk,tax_ordnr=row['Taxonom. Ordnungsnr.'],art_id=row['ArtID'],deutsch=row['Trivialname'])
 
+  # Tabelle Gebiet
+  gebiet = x.get_or_create(x.tbl.classes.Gebiet, name=row['Gebietsname'], land=row['Land'],provinz=row['Provinz'],autokennzeichen=row['Autokennzeichen'])
+  lon = row['Koordinate E']
+  lat = row['Koordinate N']
+  lon = lon.replace(',','.')
+  lat = lat.replace(',','.')
+  ret = x.gebiet.update_geometry(str(gebiet.gebiet_pk), lon, lat)
+
+
+  # Tabelle Beobachtung
   lon = row['Punktverortung E']
   lat = row['Punktverortung N']
   bbereich = 0
@@ -207,8 +255,16 @@ for index, row in df.iterrows():
     bbereich = 1
   lon = lon.replace(',','.')
   lat = lat.replace(',','.')
-  b = x.get_or_create(x.tbl.classes.Beobachtung, beobachtung_pk=str(row['DatensatzID']), bereichskoordinaten=bbereich, fk_art=art.art_pk)
+  b = x.get_or_create(
+      x.tbl.classes.Beobachtung,
+      beobachtung_pk=str(row['DatensatzID']),
+      gebietskoordinaten=bbereich,
+      fk_art=art.art_pk,
+      fk_gebiet=gebiet.gebiet_pk
+    )
   ret = x.beobachtung.update_geometry(str(row['DatensatzID']), lon, lat)
+
+
   logger.info("Processing line (%d/%d) - %s %s (%s)",index, len(df.index),row['Gattung'], row['Art'], row['Trivialname'])
 
 ########################################################################################################################
