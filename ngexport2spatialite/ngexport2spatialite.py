@@ -4,8 +4,9 @@ from logging.config import dictConfig
 import pandas as pd
 import os
 import semver
+import datetime
 
-version = semver.format_version(0, 1, 0, 'pre.3', 'build.1')
+version = semver.format_version(0, 1, 0, 'pre.4', 'build.1')
 
 def get_or_create(session, model, **kwargs):
   '''
@@ -162,7 +163,9 @@ class ngdb(object):
                 "beobachtung_pk  TEXT PRIMARY KEY UNIQUE,"
                 "fk_art REFERENCES Art(art_pk),"
                 "gebietskoordinaten INTEGER,"
-                "fk_gebiet REFERENCES Gebiet(gebiet_pk)"
+                "fk_gebiet REFERENCES Gebiet(gebiet_pk),"
+                "datum_start TEXT,"
+                "datum_ende TEXT"
               ")"
             )
       self.cur.execute(sql)
@@ -285,15 +288,30 @@ for index, row in df.iterrows():
     bbereich = 1
   lon = lon.replace(',','.')
   lat = lat.replace(',','.')
+
+  sStart=row['Datum']
+  if pd.isnull(row['Uhrzeit_von']):
+    sStart=row['Datum']+ " 0:00"
+  else:
+    sStart=row['Datum'] + " " + str(row['Uhrzeit_von'])
+  sEnde=row['Datum']
+  if pd.isnull(row['Uhrzeit_bis']):
+    sEnde=row['Datum']+ " 23:59"
+  else:
+    sEnde=row['Datum'] + " " + str(row['Uhrzeit_bis'])
+
+  dstart=datetime.datetime.strptime(sStart , '%d.%m.%Y %H:%M').strftime("%Y-%m-%d %H:%M:%S")
+  dende =datetime.datetime.strptime(sEnde  , '%d.%m.%Y %H:%M').strftime("%Y-%m-%d %H:%M:%S")
   b = x.get_or_create(
       x.tbl.classes.Beobachtung,
       beobachtung_pk=str(row['DatensatzID']),
       gebietskoordinaten=bbereich,
       fk_art=art.art_pk,
-      fk_gebiet=gebiet.gebiet_pk
+      fk_gebiet=gebiet.gebiet_pk,
+      datum_start=dstart,
+      datum_ende=dende
     )
-  ret = x.beobachtung.update_geometry(str(row['DatensatzID']), lon, lat)
-
+  ret = x.beobachtung.update_geometry(str(b.beobachtung_pk), lon, lat)
 
   logger.info("Processing line (%d/%d) - %s %s (%s)",index, len(df.index),row['Gattung'], row['Art'], row['Trivialname'])
 
