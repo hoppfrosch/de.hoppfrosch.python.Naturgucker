@@ -5,7 +5,7 @@ import pandas as pd
 import os
 import semver
 
-version = semver.format_version(0, 1, 0, 'pre.2', 'build.1')
+version = semver.format_version(0, 1, 0, 'pre.3', 'build.1')
 
 def get_or_create(session, model, **kwargs):
   '''
@@ -174,7 +174,7 @@ class ngdb(object):
       sql = (
               "CREATE TABLE Gebiet ("
                 "gebiet_pk  INTEGER PRIMARY KEY AUTOINCREMENT,"
-                "name TEXT NOT NULL,"
+                "gebietsname TEXT NOT NULL,"
                 "land TEXT NOT NULL,"
                 "provinz TEXT,"
                 "autokennzeichen TEXT"
@@ -184,6 +184,36 @@ class ngdb(object):
       # creating a POINT Geometry column
       sql = "SELECT AddGeometryColumn('Gebiet', 'geom', 4326, 'POINT', 'XY')"
       self.cur.execute(sql)
+      #### View Summary##################
+      #### View zur Verwendung in QGIS, da einfach darauf gefiltert werden kann!!! #####################################
+      self.cur.execute('DROP view IF EXISTS vwSummary')
+      sql = (
+              "CREATE VIEW vwSummary AS "
+                "SELECT "
+                "  Art.deutsch as artname,"
+                "  Gebiet.gebietsname,"
+                "  Gebiet.land,"
+                "  Gebiet.provinz,"
+                "  Gebiet.autokennzeichen,"
+                "  Beobachtung.gebietskoordinaten"
+                "  Beobachtung.geom as geom "
+                "FROM Art, Beobachtung, Gebiet "
+                "WHERE "
+                "Art.art_pk=Beobachtung.fk_art "
+                "AND Beobachtung.fk_gebiet=Gebiet.gebiet_pk"
+            )
+      self.cur.execute(sql)
+      # Damit in dem View die Geometrie-Daten verwendet werden koennen, muss man dies noch in der internen
+      # Verwaltungstabelle "views_geometry_columns" registrieren...
+      # Quelle: http://www.adventurer.org.nz/?page=gis/QGIS_tutorials/500_Databases/524_Creating_spatial_views.txt
+      sql = (
+                "INSERT INTO views_geometry_columns "
+                   "(view_name, view_geometry, view_rowid, f_table_name, f_geometry_column, read_only) "
+                "VALUES"
+                  "('vwsummary', 'geom', 'rowid', 'beobachtung', 'geom', 1)"
+            )
+      self.cur.execute(sql)
+
 
   def get_or_create(self, model, **kwargs):
     instance = self.session.query(model).filter_by(**kwargs).first()
@@ -237,7 +267,7 @@ for index, row in df.iterrows():
   art = x.get_or_create(x.tbl.classes.Art, name=row['Art'], fk_gattung=gattung.gattung_pk,tax_ordnr=row['Taxonom. Ordnungsnr.'],art_id=row['ArtID'],deutsch=row['Trivialname'])
 
   # Tabelle Gebiet
-  gebiet = x.get_or_create(x.tbl.classes.Gebiet, name=row['Gebietsname'], land=row['Land'],provinz=row['Provinz'],autokennzeichen=row['Autokennzeichen'])
+  gebiet = x.get_or_create(x.tbl.classes.Gebiet, gebietsname=row['Gebietsname'], land=row['Land'],provinz=row['Provinz'],autokennzeichen=row['Autokennzeichen'])
   lon = row['Koordinate E']
   lat = row['Koordinate N']
   lon = lon.replace(',','.')
