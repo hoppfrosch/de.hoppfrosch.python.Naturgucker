@@ -196,6 +196,8 @@ class ngdb(object):
               "CREATE VIEW vwSummary AS "
                 "SELECT "
                 "  Art.deutsch as artname,"
+                "  Beobachtung.anzahl_quantifier,"
+                "  Beobachtung.anzahl, "
                 "  Beobachtung.datum_start as von,"
                 "  Beobachtung.datum_ende as bis,"
                 "  Gebiet.gebietsname,"
