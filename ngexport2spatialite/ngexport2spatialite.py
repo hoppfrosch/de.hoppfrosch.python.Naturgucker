@@ -6,7 +6,7 @@ import os
 import semver
 import datetime
 
-version = semver.format_version(0, 1, 0, 'pre.5', 'build.1')
+version = semver.format_version(0, 1, 0, 'pre.6', 'build.1')
 
 def get_or_create(session, model, **kwargs):
   '''
@@ -165,7 +165,9 @@ class ngdb(object):
                 "gebietskoordinaten INTEGER,"
                 "fk_gebiet REFERENCES Gebiet(gebiet_pk),"
                 "datum_start TEXT,"
-                "datum_ende TEXT"
+                "datum_ende TEXT,"
+                "anzahl_quantifier TEXT,"
+                "anzahl INTEGER"
               ")"
             )
       self.cur.execute(sql)
@@ -308,6 +310,16 @@ for index, row in df.iterrows():
   else:
     sEnde=row['Datum'] + " " + str(row['Uhrzeit_bis'])
 
+  if pd.isnull(row['Anzahl']):
+    anz = -1
+  else:
+    anz = row['Anzahl']
+
+  if pd.isnull(row['+/-']):
+    aq = ''
+  else:
+    aq =  row['+/-']
+
   dstart=datetime.datetime.strptime(sStart , '%d.%m.%Y %H:%M').strftime("%Y-%m-%d %H:%M:%S")
   dende =datetime.datetime.strptime(sEnde  , '%d.%m.%Y %H:%M').strftime("%Y-%m-%d %H:%M:%S")
   b = x.get_or_create(
@@ -317,7 +329,9 @@ for index, row in df.iterrows():
       fk_art=art.art_pk,
       fk_gebiet=gebiet.gebiet_pk,
       datum_start=dstart,
-      datum_ende=dende
+      datum_ende=dende,
+      anzahl_quantifier=aq,
+      anzahl=anz
     )
   ret = x.beobachtung.update_geometry(str(b.beobachtung_pk), lon, lat)
 
