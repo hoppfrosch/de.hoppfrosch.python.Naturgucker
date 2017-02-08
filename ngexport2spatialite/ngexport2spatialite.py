@@ -6,7 +6,7 @@ import os
 import semver
 import datetime
 
-version = semver.format_version(0, 1, 0, 'pre.4', 'build.1')
+version = semver.format_version(0, 1, 0, 'pre.5', 'build.1')
 
 def get_or_create(session, model, **kwargs):
   '''
@@ -269,7 +269,13 @@ df = pd.read_csv('NGExport.csv', sep=';', encoding='utf-8')
 for index, row in df.iterrows():
   artengruppe = x.get_or_create(x.tbl.classes.Artengruppe, name=row['Artengruppe'], deutsch=row['Artengruppe'])
   gattung = x.get_or_create(x.tbl.classes.Gattung, name=row['Gattung'], fk_artengruppe=artengruppe.artengruppe_pk)
-  art = x.get_or_create(x.tbl.classes.Art, name=row['Art'], fk_gattung=gattung.gattung_pk,tax_ordnr=row['Taxonom. Ordnungsnr.'],art_id=row['ArtID'],deutsch=row['Trivialname'])
+
+  if pd.isnull(row['Trivialname']):
+    artname = row['Gattung'] + " " + row['Art']
+  else:
+    artname = row['Trivialname']
+
+  art = x.get_or_create(x.tbl.classes.Art, name=row['Art'], fk_gattung=gattung.gattung_pk,tax_ordnr=row['Taxonom. Ordnungsnr.'],art_id=row['ArtID'],deutsch=artname)
 
   # Tabelle Gebiet
   gebiet = x.get_or_create(x.tbl.classes.Gebiet, gebietsname=row['Gebietsname'], land=row['Land'],provinz=row['Provinz'],autokennzeichen=row['Autokennzeichen'])
